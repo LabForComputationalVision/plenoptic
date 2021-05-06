@@ -15,86 +15,104 @@ import math
 # fft - circular
 
 
-def correlate_downsample(image, filt, edges="reflect1", step=2, start=(0, 0), stop=None):
+def correlate_downsample(image, filt, padding_mode="reflect"):
+    """Correlate with a filter and downsample by 2
+
+    Parameters
+    ----------
+    image: torch.Tensor of shape (batch, channel, height, width)
+        Image, or batch of images. Channels are also treated as batches.
+    filt: 2-D torch.Tensor
+        The filter to correlate with the input image
+    padding_mode: string, optional
+        One of "constant", "reflect", "replicate", "circular" or "zero" (same as "constant")
+    """
+
+    if padding_mode == "zero":
+        padding_mode = "constant"
+    assert isinstance(image, torch.Tensor) and isinstance(filt, torch.Tensor)
 
     n_channels = image.shape[1]
-
-    if len(image.shape) == 3:
-
-        if isinstance(filt, np.ndarray) or filt.shape[0] != n_channels:
-            filt = torch.tensor(filt, dtype=torch.float32).repeat(n_channels,  1, 1).to(image.device)
-
-        if edges == 'zero':
-            return nn.functional.conv1d(image, filt, bias=None, stride=step,
-                                        padding=(filt.shape[-1] // 2),
-                                        dilation=1, groups=n_channels)
-
-        elif edges == 'reflect1':
-            pad = nn.ReflectionPad1d(filt.shape[-1]//2)
-            return nn.functional.conv1d(pad(image), filt, bias=None, stride=step,
-                                        padding=0, dilation=1, groups=n_channels)
-
-    if len(image.shape) == 4:
-
-        if isinstance(filt, np.ndarray) or filt.shape[0] != n_channels:
-            filt = torch.tensor(filt, dtype=torch.float32).repeat(n_channels,  1, 1, 1).to(image.device)
-
-        if edges == 'zero':
-            return nn.functional.conv2d(image, filt, bias=None, stride=step,
-                                        padding=(filt.shape[-2] // 2, filt.shape[-1] // 2),
-                                        dilation=1, groups=n_channels)
-
-        elif edges == 'reflect1':
-            pad = nn.ReflectionPad2d(filt.shape[-1]//2)
-            return nn.functional.conv2d(pad(image), filt, bias=None, stride=step,
-                                        padding=0, dilation=1, groups=n_channels)
-
-    if len(image.shape) == 5:
-
-        edges = 'zero'
-        step = (2, 2, 2)
+    image_padded = same_padding(image, kernel_size=filt.shape, pad_mode=padding_mode)
+    return F.conv2d(image_padded, filt.repeat(n_channels, 1, 1, 1), stride=2, groups=n_channels)
 
 
-        if isinstance(filt, np.ndarray) or filt.shape[0] != n_channels:
-            filt = torch.tensor(filt, dtype=torch.float32).repeat(n_channels, 1, 1, 1, 1)
+def upsample_convolve(image, odd, filt, padding_mode="reflect"):
+    """Upsample by 2 and convolve with a filter
 
-        if edges == 'zero':
-            return nn.functional.conv3d(image, filt, bias=None, stride=step,
-                                        padding=(filt.shape[-3] // 2, filt.shape[-2] // 2, filt.shape[-1] // 2),
-                                        dilation=1, groups=n_channels)
+    Parameters
+    ----------
+    image: torch.Tensor of shape (batch, channel, height, width)
+        Image, or batch of images. Channels are also treated as batches.
+    odd: tuple, list or numpy.ndarray
+        This should contain two integers of value 0 or 1, which determines whether
+        the output height and width should be even (0) or odd (1).
+    filt: 2-D torch.Tensor
+        The filter to convolve with the upsampled image
+    padding_mode: string, optional
+        One of "constant", "reflect", "replicate", "circular" or "zero" (same as "constant")
+    """
 
-        # elif edges == 'reflect1':
-        #     pad = nn.ReflectionPad3d(filt.shape[-1] // 2)
-        #     return nn.functional.conv3d(pad(image), filt, bias=None, stride=step,
-        #                                 padding=0, dilation=1, groups=n_channels)
-
-
-def upsample_convolve(image, filt, edges="reflect1", step=(2, 2), start=(0, 0), stop=None):
+    if padding_mode == "zero":
+        padding_mode = "constant"
+    assert isinstance(image, torch.Tensor) and isinstance(filt, torch.Tensor)
+    filt = filt.flip((0, 1))
 
     n_channels = image.shape[1]
-
-    if isinstance(filt, np.ndarray) or filt.shape[0] != n_channels:
-        filt = torch.tensor(filt, dtype=torch.float32, device=image.device).repeat(n_channels,  1, 1, 1)
-
-    if edges == 'zero':
-        upsample_convolve = nn.functional.conv_transpose2d(image, filt, bias=None, stride=step, padding=(filt.shape[-2] // 2, filt.shape[-1] // 2), output_padding=1, groups=n_channels, dilation=1)
-
-    if edges == 'reflect1':
-        # TODO - generalize to other image / filt sizes!
-        # this solution is specific to power of two images and filt [5 x 5]
-        # need start and stop arguments, two tuples of boolean values, even / odd
-        pad = nn.ReflectionPad2d(1)
-        return nn.functional.conv_transpose2d(pad(image), filt, bias=None, stride=step, padding=4, output_padding=1, groups=n_channels, dilation=1)
+    pad_start = np.array(filt.shape) // 2
+    pad_end = np.array(filt.shape) - np.array(odd) - pad_start
+    pad = np.array([pad_start[1], pad_end[1], pad_start[0], pad_end[0]])
+    image_prepad = F.pad(image, tuple(pad // 2), mode=padding_mode)
+    image_upsample = F.conv_transpose2d(image_prepad, weight=torch.ones((n_channels, 1, 1, 1), device=image.device),
+                                        stride=2, groups=n_channels)
+    image_postpad = F.pad(image_upsample, tuple(pad % 2))
+    return F.conv2d(image_postpad, filt.repeat(n_channels, 1, 1, 1), groups=n_channels)
 
 
-def blur_downsample(x,filtname = 'binom5', step=(2, 2)):
+def blur_downsample(x, filtname='binom5', filter_norm_one=False):
+    """Correlate with a blurring filter and downsample by 2
+
+    Parameters
+    ----------
+    x: torch.Tensor of shape (batch, channel, height, width)
+        Image, or batch of images. Channels are also treated as batches.
+    filtname: string, optional
+        Name of the 1D filter. See `pt.named_filter` for the list of valid names. The 2D blurring
+        filter is obtained by computing this 1D filter's outer product with itself.
+    filter_norm_one: bool, optional
+        If true, the norm of the filter is 1. If false (default), it is 2.
+    """
+
     f = pt.named_filter(filtname)
-    return correlate_downsample(x, filt=np.outer(f, f), step=step)
+    filt = torch.tensor(np.outer(f, f), dtype=torch.float32, device=x.device)
+    if filter_norm_one:
+        filt = filt / 2
+    return correlate_downsample(x, filt)
 
 
-def upsample_blur(x, step=(2, 2)):
-    f = pt.named_filter('binom5')
-    return upsample_convolve(x, filt=np.outer(f, f), step=step)
+def upsample_blur(x, odd, filtname='binom5', filter_norm_one=False):
+    """Upsample by 2 and convolve with a blurring filter
+
+    Parameters
+    ----------
+    x: torch.Tensor of shape (batch, channel, height, width)
+        Image, or batch of images. Channels are also treated as batches.
+    odd: tuple, list or numpy.ndarray
+        This should contain two integers of value 0 or 1, which determines whether
+        the output height and width should be even (0) or odd (1).
+    filtname: string, optional
+        Name of the 1D filter. See `pt.named_filter` for the list of valid names. The 2D blurring
+        filter is obtained by computing this 1D filter's outer product with itself.
+    filter_norm_one: bool, optional
+        If true, the norm of the filter is 1. If false (default), it is 2. If the norm is 1, the
+        image is multiplied by 4 before the blurring operation.
+    """
+
+    f = pt.named_filter(filtname)
+    filt = torch.tensor(np.outer(f, f), dtype=torch.float32, device=x.device)
+    if filter_norm_one:
+        filt = filt * 2
+    return upsample_convolve(x, odd, filt)
 
 
 def _get_same_padding(

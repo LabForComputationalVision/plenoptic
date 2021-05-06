@@ -342,10 +342,13 @@ def normalized_laplacian_pyramid(im):
 
     Arguments
     --------
-    im: torch.Tensor
+    im: torch.Tensor of shape (batch, channel, height, width)
+        Image, or batch of images. Channels are also treated as batches.
+
     Returns
     -------
     normalized_laplacian_activations: list of torch.Tensor
+        The normalized Laplacian Pyramid with six scales
     """
 
     (_, channel, height, width) = im.size()
@@ -354,7 +357,7 @@ def normalized_laplacian_pyramid(im):
     spatialpooling_filters = np.load(dirname + '/DN_filts.npy')
     sigmas = np.load(dirname + '/DN_sigmas.npy')
 
-    L = Laplacian_Pyramid(n_scales=N_scales)
+    L = Laplacian_Pyramid(n_scales=N_scales, filter_norm_one=True)
     laplacian_activations = L.analysis(im)
 
     padd = 2
@@ -387,18 +390,19 @@ def nlpd(IM_1, IM_2):
 
     Parameters
     ----------
-    IM_1: torch.Tensor
-        image, (1 x 1 x H x W)
-    IM_2: torch.Tensor
-        image, (1 x 1 x H x W)
+    IM_1: torch.Tensor of shape (1, 1, height, width)
+        The first image.
+    IM_2: torch.Tensor of shape (1, 1, height, width)
+        The second image.
 
     Returns
     -------
     distance: float
+        The normalized Laplacian Pyramid distance.
 
     Note
     ----
-    only accepts single channel images
+    The input images have to be single-channel.
 
     References
     ----------

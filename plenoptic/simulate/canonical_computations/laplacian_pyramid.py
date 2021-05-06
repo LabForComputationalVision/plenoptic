@@ -3,6 +3,7 @@ import torch.nn as nn
 from torchvision import transforms
 from ...tools.conv import blur_downsample, upsample_blur
 
+
 class Laplacian_Pyramid(nn.Module):
     """
     The Laplacian pyramid [1]_ is a multiscale image representation. It decomposes the image by computing the local mean
@@ -13,16 +14,22 @@ class Laplacian_Pyramid(nn.Module):
     --------
     n_scales: int
         number of scales to compute
+    filter_norm_one: bool, optional
+        If true, the norm of the downsampling/upsampling filter is 1. If false (default), it is 2.
+        If the norm is 1, the image is multiplied by 4 during the upsampling operation; the net effect
+        is that the `n`th scale of the pyramid is divided by `2^n`.
+
     Reference
     ---------
     .. [1] Burt, P. and Adelson, E., 1983. The Laplacian pyramid as a compact image code. IEEE Transactions on communications, 31(4), pp.532-540.
 
     """
 
-    def __init__(self, n_scales=5):
+    def __init__(self, n_scales=5, filter_norm_one=False):
         super(Laplacian_Pyramid, self).__init__()
 
         self.n_scales = n_scales
+        self.filter_norm_one = filter_norm_one
 
     def analysis(self, x):
         """
@@ -39,8 +46,9 @@ class Laplacian_Pyramid(nn.Module):
 
         y = []
         for scale in range(self.n_scales - 1):
-            x_down = blur_downsample(x)
-            x_up = upsample_blur(x_down)
+            odd = torch.tensor(x.shape)[2:4] % 2
+            x_down = blur_downsample(x, filter_norm_one=self.filter_norm_one)
+            x_up = upsample_blur(x_down, odd, filter_norm_one=self.filter_norm_one)
             y.append(x - x_up)
             x = x_down
         y.append(x)
@@ -61,7 +69,8 @@ class Laplacian_Pyramid(nn.Module):
         """
         x = y[self.n_scales - 1]
         for scale in range(self.n_scales - 1, 0, -1):
-            y_up = upsample_blur(x)
+            odd = torch.tensor(y[scale - 1].shape)[2:4] % 2
+            y_up = upsample_blur(x, odd, filter_norm_one=self.filter_norm_one)
             x = y[scale - 1] + y_up
 
         return x
