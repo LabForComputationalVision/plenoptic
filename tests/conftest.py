@@ -23,12 +23,12 @@ class ColorModel(torch.nn.Module):
 
 @pytest.fixture(scope='package')
 def curie_img():
-    return po.load_images(op.join(DATA_DIR, 'curie.pgm')).to(DEVICE)
+    return po.load_images(op.join(DATA_DIR, '256/curie.pgm')).to(DEVICE)
 
 
 @pytest.fixture(scope='package')
 def einstein_img():
-    return po.load_images(op.join(DATA_DIR, 'einstein.pgm')).to(DEVICE)
+    return po.load_images(op.join(DATA_DIR, '256/einstein.pgm')).to(DEVICE)
 
 
 @pytest.fixture(scope='package')
@@ -40,7 +40,7 @@ def color_img():
 
 @pytest.fixture(scope='package')
 def basic_stim():
-    return po.make_basic_stimuli().to(DEVICE)
+    return po.make_synthetic_stimuli().to(DEVICE)
 
 
 def get_model(name):

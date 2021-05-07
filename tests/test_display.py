@@ -362,6 +362,11 @@ class TestDisplay(object):
                 po.imshow(im, as_rgb=as_rgb, channel_idx=channel_idx,
                           batch_idx=batch_idx, plot_complex=is_complex)
 
+    def test_display_test_signals(self):
+        po.imshow(po.make_synthetic_stimuli(128));
+        po.imshow(po.load_images(DATA_DIR + '/512'));
+        po.imshow(po.load_images(DATA_DIR + '/256'));
+
     @pytest.mark.parametrize('as_rgb', [True, False])
     @pytest.mark.parametrize('channel_idx', [None, 0, [0, 1]])
     @pytest.mark.parametrize('batch_idx', [None, 0, [0, 1]])
@@ -563,7 +568,7 @@ class TestMADDisplay(object):
             img = po.load_images(op.join(DATA_DIR, 'color_wheel.jpg'), False).to(DEVICE)
             img = img[..., :16, :16]
         else:
-            img = po.load_images(op.join(DATA_DIR, 'nuts.pgm')).to(DEVICE)
+            img = po.load_images(op.join(DATA_DIR, '256/nuts.pgm')).to(DEVICE)
             img = img[..., :16, :16]
         model1 = po.simul.Identity().to(DEVICE)
         # to serve as a metric, need to return a single value, but SSIM
@@ -617,7 +622,7 @@ class TestMetamerDisplay(object):
             img = po.load_images(op.join(DATA_DIR, 'color_wheel.jpg'), False).to(DEVICE)
             img = img[..., :16, :16]
         else:
-            img = po.load_images(op.join(DATA_DIR, 'nuts.pgm')).to(DEVICE)
+            img = po.load_images(op.join(DATA_DIR, '256/nuts.pgm')).to(DEVICE)
             img = img[..., :16, :16]
         if model == 'class':
             #  height=1 and order=0 to limit the time this takes, and then we
