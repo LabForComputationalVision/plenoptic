@@ -168,7 +168,6 @@ def convert_float_to_int(im, dtype=np.uint8):
     return (im * np.iinfo(dtype).max).astype(dtype)
 
 
-
 def make_synthetic_stimuli(size=256, requires_grad=True):
     r""" Make a set of basic stimuli, useful for developping and debugging models
 
