@@ -37,9 +37,8 @@ class Geodesic(OptimizedSynthesis):
         the number of steps (i.e., transitions) in the trajectory between the
         two anchor points.
     initial_sequence
-        initialize the geodesic with pixel linear interpolation
-        (``'straight'``), or with a brownian bridge between the two anchors
-        (``'bridge'``).
+        initialize the geodesic with user-supplied sequence of shape
+        [n_steps+1, C, H, W] or pixel linear interpolation (``None``).
     range_penalty_lambda
         strength of the regularizer that enforces the allowed_range. Must be
         non-negative.
@@ -97,7 +96,7 @@ class Geodesic(OptimizedSynthesis):
     """
     def __init__(self, image_a: Tensor, image_b: Tensor,
                  model: torch.nn.Module, n_steps: int = 10,
-                 initial_sequence: Literal['straight', 'bridge'] = 'straight',
+                 initial_sequence: Optional[Tensor] = None,
                  range_penalty_lambda: float = .1,
                  allowed_range: Tuple[float, float] = (0, 1)):
         super().__init__(range_penalty_lambda, allowed_range)
@@ -115,24 +114,41 @@ class Geodesic(OptimizedSynthesis):
         self._dev_from_line = []
         self._step_energy = []
 
-    def _initialize(self, initial_sequence, start, stop, n_steps):
+    def _initialize(self, initial_sequence: Optional[Tensor],
+                    start: Tensor, stop: Tensor, n_steps: int):
         """initialize the geodesic
 
         Parameters
         ----------
         initial_sequence
-            initialize the geodesic with pixel linear interpolation
-            (``'straight'``), or with a brownian bridge between the two anchors
-            (``'bridge'``).
+            initialize the geodesic with user-supplied sequence of shape
+            [n_steps+1, C, H, W] or pixel linear interpolation (``None``).
+        start, stop
+            Start and stop anchor points of the geodesic, of shape [1, C, H, W].
+        n_steps
+            the number of steps (i.e., transitions) in the trajectory between the
+            two anchor points.
+
         """
-        if initial_sequence == 'bridge':
-            geodesic = sample_brownian_bridge(start, stop, n_steps)
-        elif initial_sequence == 'straight':
+        if initial_sequence is None:
             geodesic = make_straight_line(start, stop, n_steps)
         else:
-            raise ValueError(f"Don't know how to handle initial_sequence={initial_sequence}")
+            if initial_sequence.ndimension() < 4 or initial_sequence.shape[0] != n_steps+1:
+                raise ValueError("initial_sequence must be torch.Size([n_steps+1"
+                                 ", n_channels, im_height, im_width]) but got "
+                                 f"{initial_sequence.size()}")
+            if initial_sequence.size()[1:] != start.size()[1:] or initial_sequence.size()[1:] != stop.size()[1:]:
+                raise ValueError("initial_sequence, image_a, and image_b must have same"
+                                 " number of channels, height and width, but got"
+                                 f"initial_sequence: {initial_sequence.size()}, "
+                                 f"image_a: {start.size()}, image_b: {stop.size()}.")
+            if not torch.equal(initial_sequence[0], start[0]):
+                raise ValueError("First frame of initial_sequence must be the same as image_a!")
+            if not torch.equal(initial_sequence[-1], stop[0]):
+                raise ValueError("Last frame of initial_sequence must be the same as image_b!")
+            geodesic = initial_sequence.clone().detach()
+            geodesic = geodesic.to(dtype=start.dtype, device=start.device)
         _, geodesic, _ = torch.split(geodesic, [1, n_steps-1, 1])
-        self._initial_sequence = initial_sequence
         geodesic.requires_grad_()
         self._geodesic = geodesic
 
@@ -199,7 +215,8 @@ class Geodesic(OptimizedSynthesis):
         """Compute geodesic synthesis loss.
 
         This is the path energy (i.e., squared L2 norm of each step) of the
-        geodesic's model representation, with the weighted range penalty.
+        geodesic's model representation (summed across frames), with the
+        weighted range penalty.
 
         Additionally, caches:
 
@@ -224,7 +241,7 @@ class Geodesic(OptimizedSynthesis):
             geodesic = self.geodesic
         self._geodesic_representation = self.model(geodesic)
         self._most_recent_step_energy = self._calculate_step_energy(self._geodesic_representation)
-        loss = self._most_recent_step_energy.mean()
+        loss = self._most_recent_step_energy.sum()
         range_penalty = penalize_range(self.geodesic, self.allowed_range)
         return loss + self.range_penalty_lambda * range_penalty
 
@@ -232,7 +249,7 @@ class Geodesic(OptimizedSynthesis):
         """calculate the energy (i.e. squared l2 norm) of each step in `z`.
         """
         velocity = torch.diff(z, dim=0)
-        step_energy = torch.linalg.vector_norm(velocity, ord=2, dim=[1, 2, 3]) ** 2
+        step_energy = torch.linalg.vector_norm(velocity, ord=2, dim=[2, 3]) ** 2
         return step_energy
 
     def _optimizer_step(self, pbar):
@@ -437,7 +454,7 @@ class Geodesic(OptimizedSynthesis):
 
         This should be called by an initialized ``Geodesic`` object -- we will
         ensure that ``image_a``, ``image_b``, ``model``, ``n_steps``,
-        ``initial_sequence``, ``range_penalty_lambda``, ``allowed_range``, and
+        ``range_penalty_lambda``, ``allowed_range``, and
         ``pixelfade`` are all identical.
 
         Note this operates in place and so doesn't return anything.
@@ -469,7 +486,7 @@ class Geodesic(OptimizedSynthesis):
 
         """
         check_attributes = ['_image_a', '_image_b', 'n_steps',
-                            '_initial_sequence', '_range_penalty_lambda',
+                            '_range_penalty_lambda',
                             '_allowed_range', 'pixelfade']
         check_loss_functions = []
         new_loss = self.objective_function(self.pixelfade)
@@ -608,14 +625,14 @@ def plot_deviation_from_line(geodesic: Geodesic,
         ax = plt.gca()
 
     pixelfade_dev = deviation_from_line(geodesic.model(geodesic.pixelfade))
-    ax.plot(*[to_numpy(d) for d in pixelfade_dev], 'g-o', label='pixelfade')
+    ax.plot(*[to_numpy(d) for d in pixelfade_dev], marker='o', label='pixelfade')
 
     geodesic_dev = deviation_from_line(geodesic.model(geodesic.geodesic).detach())
-    ax.plot(*[to_numpy(d) for d in geodesic_dev], 'r-o', label='geodesic')
+    ax.plot(*[to_numpy(d) for d in geodesic_dev], marker='o', label='geodesic')
 
     if natural_video is not None:
         video_dev = deviation_from_line(geodesic.model(natural_video))
-        ax.plot(*[to_numpy(d) for d in video_dev], 'b-o', label='natural video')
+        ax.plot(*[to_numpy(d) for d in video_dev], marker='o', label='natural video')
 
     ax.set(xlabel='Distance along representation line',
            ylabel='Distance from representation line',
@@ -623,3 +640,90 @@ def plot_deviation_from_line(geodesic: Geodesic,
     ax.legend(loc=1)
 
     return ax
+
+
+def plot_PC_projections(geodesic: Geodesic,
+                        natural_video: Union[Tensor, None] = None,
+                        concatenated: bool = False,
+                        figsize: Tuple[float, float] = (10., 5.),
+                        ) -> mpl.figure.Figure:
+    """Plot projection onto first 2 PCs for visualization
+
+    Parameters
+    ----------
+    geodesic :
+        Geodesic object to visualize.
+    natural_video :
+        Natural video that bridges the anchor points, for comparison.
+    concatenated :
+        Whether to take the SVD on the concatenation of all visualized
+        sequences, or just the relevant one (pixel space: geodesic.pixelfade,
+        representational space: geodesic.geodesic)
+
+    Returns
+    -------
+    fig :
+        Figure containing the plot
+
+    """
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    pixelfade = geodesic.pixelfade.view(geodesic.n_steps+1, -1)
+    geo = geodesic.geodesic.view(geodesic.n_steps+1, -1).detach()
+    if natural_video is not None:
+        natural_video_response = geodesic.model(natural_video).view(geodesic.n_steps+1, -1)
+    if not concatenated:
+        pxf_mean = pixelfade.mean(0)
+        pixelfade = pixelfade - pxf_mean
+        geo = geo - pxf_mean
+        if natural_video is not None:
+            natural_video = natural_video - pxf_mean
+        _, s, V = torch.linalg.svd(pixelfade, full_matrices=False)
+    else:
+        X = torch.cat([geo, pixelfade], dim=0)
+        X_mean = X.mean(0)
+        if natural_video is not None:
+            X = torch.cat([X, natural_video.view(geodesic.n_steps+1, -1)], dim=0)
+            X_mean = X.mean(0)
+            natural_video = natural_video - X_mean
+        X = X - X_mean
+        pixelfade = pixelfade - X_mean
+        geo = geo - X_mean
+        _, s, V = torch.linalg.svd(X, full_matrices=False)
+
+    print(s/s.sum())
+    axes[0].plot(*torch.matmul(pixelfade, V[:2].T).T, '-o', label='pixelfade')
+    axes[0].plot(*torch.matmul(geo, V[:2].T).T, '-o', label='geodesic')
+    if natural_video is not None:
+        axes[0].plot(*torch.matmul(natural_video, V[:2].T).T, '-o', label='geodesic')
+    axes[0].set(xlabel='PC1', ylabel='PC2', title='Pixel space')
+
+    pixelfade = geodesic.model(geodesic.pixelfade).view(geodesic.n_steps+1, -1)
+    geo = geodesic.model(geodesic.geodesic).view(geodesic.n_steps+1, -1).detach()
+    if not concatenated:
+        geo_mean = geo.mean(0)
+        pixelfade = pixelfade - geo_mean
+        geo = geo - geo_mean
+        if natural_video is not None:
+            natural_video_response = natural_video_response - geo_mean
+        _, s, V = torch.linalg.svd(geo, full_matrices=False)
+    else:
+        X = torch.cat([geo, pixelfade], dim=0)
+        X_mean = X.mean(0)
+        if natural_video is not None:
+            X = torch.cat([X, natural_video_response.view(geodesic.n_steps+1, -1)], dim=0)
+            X_mean = X.mean(0)
+            natural_video_response = natural_video_response - X_mean
+        X = X - X_mean
+        pixelfade = pixelfade - X_mean
+        geo = geo - X_mean
+        _, s, V = torch.linalg.svd(X, full_matrices=False)
+
+    print(s/s.sum())
+    axes[1].plot(*torch.matmul(pixelfade, V[:2].T).T, '-o', label='pixelfade')
+    axes[1].plot(*torch.matmul(geo, V[:2].T).T, '-o', label='geodesic')
+    if natural_video is not None:
+        axes[0].plot(*torch.matmul(natural_video_response, V[:2].T).T, '-o', label='geodesic')
+    axes[1].set(xlabel='PC1', ylabel='PC2', title='Representational space')
+    axes[1].legend(loc='best')
+
+    return fig, V

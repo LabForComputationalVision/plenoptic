@@ -1,6 +1,3 @@
-# we do this to enable deterministic behavior on the gpu, see
-# https://docs.nvidia.com/cuda/cublas/index.html#cublasApi_reproducibility for
-# details
 from conftest import DEVICE, DATA_DIR
 from test_metric import osf_download
 import os.path as op
@@ -14,6 +11,9 @@ import pytest
 import matplotlib.pyplot as plt
 from packaging import version
 import os
+# we do this to enable deterministic behavior on the gpu, see
+# https://docs.nvidia.com/cuda/cublas/index.html#cublasApi_reproducibility for
+# details
 os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
 
 

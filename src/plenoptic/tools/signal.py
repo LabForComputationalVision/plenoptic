@@ -123,8 +123,6 @@ def interpolate1d(
     Returns the one-dimensional piecewise linear interpolant to a
     function with given discrete data points (X, Y), evaluated at x_new.
 
-    Note: this function is just a wrapper around ``np.interp()``.
-
     Parameters
     ----------
     x_new
@@ -138,8 +136,10 @@ def interpolate1d(
     -------
     Interpolated values of shape identical to `x_new`.
 
+    Notes
+    -----
+    This function is a wrapper around ``np.interp()``.
     """
-
     out = np.interp(x=x_new.flatten(), xp=X, fp=Y)
 
     return np.reshape(out, x_new.shape)
@@ -190,7 +190,9 @@ def polar_to_rectangular(amplitude: Tensor, phase: Tensor) -> Tensor:
 
 def autocorr(x: Tensor, n_shifts: int = 7) -> Tensor:
     """Compute the autocorrelation of `x` up to `n_shifts` shifts,
-    the calculation is performed in the frequency domain.
+
+    This autocorrelation calculation is performed in the frequency domain.
+
     Parameters
     ---------
     x
@@ -218,6 +220,19 @@ def autocorr(x: Tensor, n_shifts: int = 7) -> Tensor:
       location (ie. no shift) - that maximum value is the signal's variance
       (assuming that the input signal is mean centered).
 
+    Notes
+    -----
+    - By the Einstein-Wiener-Khinchin theorem:
+    The autocorrelation of a wide sense stationary (WSS) process is the
+    inverse Fourier transform of its energy spectrum (ESD) - which itself
+    is the multiplication between FT(x(t)) and FT(x(-t)).
+    In other words, the auto-correlation is convolution of the signal `x` with
+    itself, which corresponds to squaring in the frequency domain.
+    This approach is computationally more efficient than brute force
+    (n log(n) vs n^2).
+    - By Cauchy-Swartz, the autocorrelation attains it is maximum at the center
+    location (ie. no shift) - that maximum value is the signal's variance
+    (assuming that the input signal is mean centered).
     """
     N, C, H, W = x.shape
     assert n_shifts >= 1
@@ -428,3 +443,48 @@ def add_noise(img: Tensor, noise_mse: Union[float, List[float]]) -> Tensor:
         noise_mse / (noise**2).mean((-1, -2)).unsqueeze(-1).unsqueeze(-1)
     )
     return img + noise
+
+
+def unwrap(p: Tensor, dim: int = -1) -> Tensor:
+    """Unwrap by taking the complement of large deltas with respect to the period.
+
+    This is a pytorch implementation of numpy's unwrap method, based off the
+    function in
+    https://discuss.pytorch.org/t/np-unwrap-function-in-pytorch/34688
+
+    This is equivalent to numpy's implementation with period=pi/2 and
+    discont=period/2, and the goal is to allow for reasonable computation of
+    distance on angles.
+
+    Parameters
+    ----------
+    p
+        Input tensor.
+    dim
+        Dimension along which unwrap will operate.
+
+    Returns
+    -------
+    unwrapped
+        Unwrapped tensor, same shape as `p`
+
+    """
+    # goal is to add a single 0 at the beginning of whichever dimension we're
+    # unwrapping along, see
+    # https://pytorch.org/docs/stable/generated/torch.nn.functional.pad.html
+    # for why pad is constructed this way
+    pad = p.ndim * [0, 0]
+    if dim >= p.ndim or dim < -p.ndim:
+        raise ValueError("dim must lie within [-p.ndim, p.ndim-1], but got "
+                         f"dim={dim} and p.ndim={p.ndim} instead!")
+    elif dim >= 0:
+        idx = 2 * (p.ndim - dim - 1)
+    else:
+        idx = 2 * abs(dim + 1)
+    pad[idx] = 1
+    dp = torch.nn.functional.pad(p.diff(dim=dim), pad)
+    dp_m = ((dp+np.pi) % (2 * np.pi)) - np.pi
+    dp_m[(dp_m == -np.pi) & (dp > 0)] = np.pi
+    p_adj = dp_m - dp
+    p_adj[dp.abs() < np.pi] = 0
+    return p + p_adj.cumsum(dim)
