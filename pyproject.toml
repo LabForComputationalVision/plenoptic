@@ -55,6 +55,8 @@ dev = [
     'pytest-xdist',
     "requests>=2.21",
     "pooch>=1.2.0",
+    "nox",
+    "ruff>=0.5.1",
 ]
 
 nb = [
@@ -82,3 +84,61 @@ local_scheme = 'no-local-version'
 addopts = "--cov=plenoptic"
 testpaths = ["tests"]
 
+[tool.ruff]
+extend-include = ["*.ipynb"]
+src = ["src", "tests"]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".github",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "tests",
+    "docs",
+    ]
+
+# Set the maximum line length to 79. Default is 88.
+line-length = 79
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes: basic static analzsis for common errors like undefined names
+    # and missing imports.
+    "F",
+    # pyupgrade
+    #"UP",
+    # flake8-bugbear
+    #"B",
+    # flake8-simplify
+    #"SIM",
+    # isort
+    #"I",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
