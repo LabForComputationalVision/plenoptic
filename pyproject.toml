@@ -57,6 +57,8 @@ dev = [
     'pytest-cov',
     'pytest-xdist',
     "pooch>=1.2.0",
+    "nox",
+    "ruff>=0.6.8",
 ]
 
 nb = [
@@ -84,3 +86,78 @@ local_scheme = 'no-local-version'
 addopts = "--cov=plenoptic -n auto"
 testpaths = ["tests"]
 
+[tool.ruff]
+extend-include = ["*.ipynb"]
+src = ["src", "tests"]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".github",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "tests",
+    "docs",
+    ]
+
+# Set the maximum line length (same as Black)
+line-length = 88
+
+indent-width = 4 # same as Black
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes: basic static analzsis for common errors like undefined names
+    # and missing imports.
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    # "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]
+ignore = ["SIM105"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"

@@ -100,7 +100,7 @@ git pull upstream main
 # update your fork's main branch with any changes from upstream
 git push origin main
 # create and switch to the branch
-git checkout -b my_cool_branch 
+git checkout -b my_cool_branch
 ```
 
 Then, create new changes on this branch and, when you're ready, add and commit them:
@@ -109,16 +109,16 @@ Then, create new changes on this branch and, when you're ready, add and commit t
 # stage the changes
 git add src/plenoptic/the_file_you_changed.py
 # commit your changes
-git commit -m "A helpful message explaining my changes" 
+git commit -m "A helpful message explaining my changes"
 # push to the origin remote
-git push origin my_cool_branch 
+git push origin my_cool_branch
 ```
 
 If you aren't comfortable with `git add`, `git commit`, `git push`, I recommend the [Software Carpentry git lesson](https://swcarpentry.github.io/git-novice/).
 
 #### Contributing your change back to plenoptic
 
-You can make any number of changes on your branch. Once you're happy with your changes, [add tests](#adding-tests) to check that they run correctly and [add documentation](#adding-documentation), then make sure the existing [tests](#testing) all run successfully, that your branch is up-to-date with main, and then open a pull request by clicking on the big `Compare & pull request` button that appears at the top of your fork after pushing to your branch (see [here](https://intersect-training.org/collaborative-git/03-pr/index.html) for a tutorial). 
+You can make any number of changes on your branch. Once you're happy with your changes, [add tests](#adding-tests) to check that they run correctly and [add documentation](#adding-documentation), then make sure the existing [tests](#testing) all run successfully, that your branch is up-to-date with main, and then open a pull request by clicking on the big `Compare & pull request` button that appears at the top of your fork after pushing to your branch (see [here](https://intersect-training.org/collaborative-git/03-pr/index.html) for a tutorial).
 
 Your pull request should include information on what you changed and why, referencing any relevant issues or discussions, and highlighting any portion of your changes where you have lingering questions (e.g., "was this the right way to implement this?") or want reviewers to pay special attention. You can look at previous closed pull requests to see what this looks like.
 
@@ -126,7 +126,54 @@ At this point, we will be notified of the pull request and will read it over. We
 
 If your changes are integrated, you will be added as a Github contributor and as one of the authors of the package. Thank you for being part of `plenoptic`!
 
-### Style guide
+### Code Quality and Linting
+We use [Ruff](https://docs.astral.sh/ruff/) for linting and formatting our Python code to maintain a consistent code style and catch potential errors early. To ensure your contributions meet these standards, please follow the guidelines below:
+
+#### Using Ruff
+
+Ruff is a fast and comprehensive Python formatter and linter that checks for common style and code quality issues. It combines multiple tools, like Pyflakes, pycodestyle, isort, and other linting rules into one efficient tool, which are specified in `pyproject.toml`. Before submitting your code, make sure to run Ruff to catch any issues.
+
+**Using Ruff for [Formatting](https://docs.astral.sh/ruff/formatter/#philosophy):**
+
+`ruff format` is the primary entrypoint to the formatter. It accepts a list of files or directories, and formats all discovered Python files:
+```bash
+ruff format                   # Format all files in the current directory.
+ruff format path/to/code/     # Format all files in `path/to/code` (and any subdirectories).
+ruff format path/to/file.py   # Format a single file.
+```
+For the full list of supported options, run `ruff format --help`.
+
+**Using Ruff for [Linting](https://docs.astral.sh/ruff/linter/):**
+
+To run Ruff on your code:
+```bash
+ruff check .
+```
+It'll then tell you which lines are violating linting rules and may suggest that some errors are automatically fixable.
+
+To automatically fix lintint errors, run:
+
+```bash
+ruff --fix .
+```
+
+Be careful with **unsafe fixes**, safe fixes are symbolized with the tools emoji and are listed [here](https://docs.astral.sh/ruff/rules/)!
+
+#### Ignoring Ruff Linting
+You may want to suppress lint errors, for example when too long lines (code `E501`) are desired because otherwise the url might not be readable anymore.
+You can do this by adding the following to the end of the line:
+
+```bash
+# noqa: E501
+```
+If you want to suppress an error across an entire file, do this:
+```bash
+# ruff: noqa: E501
+```
+
+For more details, refer to the [documentation](https://docs.astral.sh/ruff/linter/#error-suppression).
+
+#### General Style Guide Recommendations:
 
 - Longer, descriptive names are preferred (e.g., `x` is not an appropriate name
   for a variable), especially for anything user-facing, such as methods,
@@ -134,6 +181,17 @@ If your changes are integrated, you will be added as a Github contributor and as
 - Any public method or function must have a complete type-annotated docstring
   (see [below](#docstrings) for details). Hidden ones do not *need* to have
   complete docstrings, but they probably should.
+
+#### Pre-Commit Hooks:  Identifying simple issues before submission to code review (and how to ignore those)
+Pre-commit hooks are useful for the developer to check if all the linting and formatting rules (see Ruff above) are honored _before_ committing. That is, when you commit, pre-commit hooks are run and auto-fixed where applicable (e.g., trailing whitespace). You then need to add _again_ if you want these changes to be included in your commit.
+
+Should you want to ignore pre-commit hooks, you can add `--no-verify` to your commit message like this:
+```bash
+git commit -m <my commit message> --no-verify
+```
+
+All of the above only applies, if you have the pre-commit package manager installed using
+`pip install pre-commit`.
 
 ### Adding models or synthesis methods
 
@@ -199,7 +257,124 @@ several choices for how to run a subset of the tests:
 View the [pytest documentation](https://doc.pytest.org/en/latest/usage.html) for
 more info.
 
-### Adding tests 
+### Using nox to simplify testing and linting
+This section is optional but if you want to easily run tests in an isolated environment
+using the [nox](https://nox.thea.codes/en/stable/) command-line tool.
+
+`nox` is installed automatically as a `[dev]` dependency of plenoptic.
+
+To run all tests and linters through `nox`, from the root folder of the
+plenoptic package, execute the following command,
+
+```bash
+nox
+```
+
+`nox` will read the configuration from the `noxfile.py` script.
+
+If you want to run just the tests, add the following option,
+
+```bash
+nox -s tests
+```
+
+for running only the linters,
+
+```bash
+nox -s linters
+```
+
+and for testing only the coverage, run:
+
+```bash
+nox -s coverage
+```
+
+`nox` offers a variety of configuration options, you can learn more about it from their
+[documentation](https://nox.thea.codes/en/stable/config.html).
+
+#### Multi-python version testing with pyenv
+Sometimes, before opening a pull-request that will trigger the `.github/workflow/ci.yml` continuous
+integration workflow, you may want to test your changes over all the supported python versions locally.
+
+Handling multiple installed python versions on the same machine can be challenging and confusing.
+[`pyenv`](https://github.com/pyenv/pyenv) is a great tool that really comes to the rescue.
+
+This tool doesn't come with the package dependencies and has to be installed separately. Installation instructions
+are system specific but the package readme is very details, see
+[here](https://github.com/pyenv/pyenv?tab=readme-ov-file#installation).
+
+Follow carefully the instructions to configure pyenv after installation.
+
+Once you have tha package installed and configured, you can install multiple python version through it.
+First get a list of the available versions with the command,
+
+```bash
+pyenv install -l
+```
+
+Install the python version you need. For this example, let's assume we want `python 3.10.11` and `python 3.11.8`,
+
+```bash
+pyenv install 3.10.11
+pyenv install 3.11.8
+```
+
+You can check which python version is currently set as default, by typing,
+
+```bash
+pyenv which python
+```
+
+And you can list all available versions of python with,
+
+```bash
+pyenv versions
+```
+If you want to run `nox` on multiple python versions, all you need to do is:
+
+1. Set your desired versions as `global`.
+    ```bash
+    pyenv global 3.11.8 3.10.11
+    ```
+    This will make both version available, and the default python will be set to the first one listed
+    (`3.11.8` in this case).
+2. Run nox specifying the python version as an option.
+    ```bash
+    nox -p 3.10
+    ```
+
+Note that `noxfile.py` lists the available option as keyword arguments in a session specific manner.
+
+If you have multiple python version installed, we recommend to manage your virtual environments
+through `pyenv`. For that you'll need to install the extension
+[`pyenv-virtualenv`](https://github.com/pyenv/pyenv-virtualenv).
+
+This tool works with most of the environment managers including (`venv` and `conda`).
+Creating an environment with it is as simple as calling,
+
+```bash
+pyenv virtualenv my-python my-enviroment
+```
+
+Here, `my-python` is the python version, one between `pyenv versions`, and `my-environment` is your
+new environment name.
+
+If `my-python` has `conda` installed, it will create a conda environment, if not, it will use `venv`.
+
+You can list the virtual environment only with,
+
+```bash
+pyenv virtualenvs
+```
+
+And you can uninstall an environment with,
+
+```bash
+pyenv uninstall my-environment
+```
+
+### Adding tests
 
 New tests can be added in any of the existing `tests/test_*.py` scripts. Tests
 should be functions, contained within classes. The class contains a bunch of
@@ -261,7 +436,7 @@ metamer instances run for. We do this using
   `vgg16_synth_max_iter 10`; note that you need a `-p` for each parameter and
   you should change nothing else about that line). See the block with `if: ${{
   matrix.notebook == 'examples/Demo_Eigendistortion.ipynb' }}` for an example.
-  
+
 A similar procedure could be used to reduce the size of an image or other steps
 that could similarly reduce the total time necessary to run a notebook.
 
@@ -395,7 +570,7 @@ header (you can have as many sub-headers as you'd like).
 
 You should [build the docs yourself](#build-the-documentation) to ensure it
 looks correct before pushing.
- 
+
 #### Images and plots
 
 You can include images in `.rst` files in the documentation as well. Simply
@@ -405,9 +580,9 @@ place them in the `docs/images/` folder and use the `figure` role, e.g.,:
 .. figure:: images/path_to_my_image.svg
    :figwidth: 100%
    :alt: Alt-text describing my image.
-   
+
    Caption describing my image.
-   
+
 ```
 
 To refer to it directly, you may want to use the [numref
