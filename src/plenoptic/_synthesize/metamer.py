@@ -327,9 +327,9 @@ class Metamer(_OptimizedSynthesis):
         >>> met.losses
         tensor([0.0194, 0.0198, 0.0179, 0.0160, 0.0145, 0.0132])
 
-        Synthesize a metamer, using ``store_progress`` so we can examine progress
-        later. (This also enables us to create a video of the metamer changing over
-        the course of synthesis, see
+        Set ``store_progress`` in order to examine the metamer-in-progress over the
+        course of synthesis. (This also enables us to create a video of the metamer
+        changing over the course of synthesis, see
         :func:`~plenoptic.plot.synthesis_animate`.)
 
         >>> met = po.Metamer(img, model)
@@ -483,9 +483,10 @@ class Metamer(_OptimizedSynthesis):
         >>> met.losses[-1]
         tensor(0.0132)
 
-        Can be called with a different image. (Note that, because we called
-        :meth:`synthesize` with ``store_progress=True``, we cached the metamer
-        over the course of synthesis):
+        Can be called with a different image. In the following example, we compute the
+        objective function on the initial metamer, which thus matches the first stored
+        loss value (note that, because we called :meth:`synthesize` with
+        ``store_progress=True``, we cached the metamer over the course of synthesis).
 
         >>> met.objective_function(met.saved_metamer[0])
         tensor(0.0194, grad_fn=<AddBackward0>)
@@ -631,30 +632,30 @@ class Metamer(_OptimizedSynthesis):
         'pixel_change_norm': tensor(2.5326),
         'gradient_norm': tensor(0.0010)}
 
-        Get values from last iteration of synthesis:
-
-        >>> print(met.get_progress(-2))
-        {'losses': tensor(0.0145),
-        'iteration': 4,
-        'penalties': tensor(0.0180),
-        'pixel_change_norm': tensor(2.2698),
-        'gradient_norm': tensor(0.0268)}
-
         Get current values:
 
-        >>> print(met.get_progress(-1))
+        >>> met.get_progress(-1)
         {'losses': tensor(0.0132),
         'iteration': 5,
         'penalties': tensor(0.0174),
         'pixel_change_norm': None,
         'gradient_norm': None}
 
+        Get values from last iteration of synthesis:
+
+        >>> met.get_progress(-2)
+        {'losses': tensor(0.0145),
+        'iteration': 4,
+        'penalties': tensor(0.0180),
+        'pixel_change_norm': tensor(2.2698),
+        'gradient_norm': tensor(0.0268)}
+
         When synthesis is run with ``store_progress=True``, this function also
         returns the metamer from the corresponding iteration:
 
         >>> met = po.Metamer(img, model)
         >>> met.synthesize(5, store_progress=True)
-        >>> print(met.get_progress(-1))
+        >>> met.get_progress(-1)
         {'losses': tensor(0.0124),
         'iteration': 5,
         'penalties': tensor(0.0168),
@@ -666,11 +667,13 @@ class Metamer(_OptimizedSynthesis):
         True
 
         When synthesis is run with ``store_progress>1``, this function returns the
-        metamer from the closest iteration:
+        metamer from the closest iteration. This might not be the specified iteration,
+        since we only cached the metamer every ``store_progress`` iterations (2, in
+        the following example):
 
         >>> met = po.Metamer(img, model)
         >>> met.synthesize(5, store_progress=2)
-        >>> print(met.get_progress(-3))
+        >>> met.get_progress(-3)
         {'losses': tensor(0.0152),
         'iteration': 3,
         'penalties': tensor(0.0182),
@@ -682,7 +685,7 @@ class Metamer(_OptimizedSynthesis):
         When we cannot grab the saved metamer corresponding to the requested
         iteration, ``iteration_selection`` controls how we determine "closest":
 
-        >>> print(met.get_progress(-3, iteration_selection="floor"))
+        >>> met.get_progress(-3, iteration_selection="floor")
         {'losses': tensor(0.0152),
         'iteration': 3,
         'penalties': tensor(0.0182),
@@ -1265,7 +1268,7 @@ class Metamer(_OptimizedSynthesis):
         Examples
         --------
         If synthesize is called without ``store_progress``, then this attribute
-        just contains the metamer, though the number of dimensions is different:
+        just contains the metamer, though there will be an additional dimension:
 
         >>> import plenoptic as po
         >>> po.set_seed(0)
